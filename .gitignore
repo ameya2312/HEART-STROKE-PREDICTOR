@@ -1,0 +1,5 @@
+NLP_for_ML/
+*.ipynb
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
