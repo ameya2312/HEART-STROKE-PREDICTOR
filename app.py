@@ -7,6 +7,7 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
+import plotly.express as px
 import psycopg2
 import streamlit as st
 from psycopg2.extras import RealDictCursor
@@ -231,6 +232,70 @@ def delete_user_prediction_history(user_id):
     conn.close()
 
 
+def render_recommendations(prediction_result, age, resting_bp, cholesterol):
+    st.subheader("💡 Personalized Health Recommendations")
+    
+    if "High Risk" in prediction_result:
+        st.warning("Your recent prediction indicates a high risk. Here are some actionable steps:")
+        
+        recs = []
+        if resting_bp > 140:
+            recs.append("- **Blood Pressure Control:** Your BP is high. Reduce salt intake, exercise regularly, and consult a doctor about medication.")
+        if cholesterol > 240:
+            recs.append("- **Cholesterol Management:** Focus on a heart-healthy diet rich in fiber and low in saturated fats. Consider Omega-3 supplements.")
+        if age > 50:
+            recs.append("- **Age-Related Monitoring:** Regular checkups are crucial at your age. Monitor your heart rate during exercise.")
+        
+        recs.append("- **Lifestyle Changes:** Avoid smoking, limit alcohol, and practice stress-management techniques like meditation.")
+        
+        for rec in recs:
+            st.write(rec)
+            
+        st.info("⚠️ *Disclaimer: These are general suggestions. Please consult a medical professional for personalized advice.*")
+    else:
+        st.success("Great job! Your current risk is low. Maintain your healthy habits.")
+        st.write("- **Consistency is Key:** Keep up with your balanced diet and regular physical activity.")
+        st.write("- **Regular Screening:** Even with low risk, yearly checkups are recommended.")
+
+
+def render_visualizations(history_df):
+    if history_df.empty:
+        return
+
+    st.subheader("📈 Health Trends Over Time")
+    
+    # Sort by Saved At for proper time series
+    history_df["Saved At"] = pd.to_datetime(history_df["Saved At"])
+    viz_df = history_df.sort_values("Saved At")
+
+    # Metrics selection for comparison
+    metrics = ["Resting BP", "Cholesterol", "Max HR"]
+    
+    fig = px.line(
+        viz_df, 
+        x="Saved At", 
+        y=metrics, 
+        title="Vital Metrics Comparison Over Time",
+        labels={"value": "Metric Value", "variable": "Health Metric"},
+        markers=True
+    )
+    
+    fig.update_layout(hovermode="x unified")
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Risk progression
+    st.write("**Risk History Visualization**")
+    fig_risk = px.scatter(
+        viz_df,
+        x="Saved At",
+        y="Result",
+        color="Result",
+        color_discrete_map={"High Risk of Heart Disease": "red", "Low Risk of Heart Disease": "green"},
+        title="Prediction Risk Progression"
+    )
+    st.plotly_chart(fig_risk, use_container_width=True)
+
+
 def render_auth_page():
     st.title("Heart Disease Prediction Login")
     st.write("Create an account or log in to access the prediction tool.")
@@ -341,18 +406,26 @@ def render_prediction_page(model, scaler, expected_columns):
         else:
             st.success("Low Risk of Heart Disease")
 
-    st.subheader("Recent Prediction History")
-    history_df = get_user_prediction_history(st.session_state.user["id"], limit=10)
-    export_history_df = get_user_prediction_history(st.session_state.user["id"])
+        # Show recommendations immediately after prediction
+        render_recommendations(prediction_result, age, resting_bp, cholesterol)
 
+    # Historical Visualization
+    history_df = get_user_prediction_history(st.session_state.user["id"])
+    if not history_df.empty:
+        render_visualizations(history_df)
+
+    st.subheader("Recent Prediction History")
+    # Limit to latest 10 for table display
+    table_history_df = get_user_prediction_history(st.session_state.user["id"], limit=10)
+    
     action_col1, action_col2 = st.columns(2)
     with action_col1:
         st.download_button(
             "Download History CSV",
-            data=export_history_df.to_csv(index=False),
+            data=history_df.to_csv(index=False),
             file_name=f"{st.session_state.user['username']}_prediction_history.csv",
             mime="text/csv",
-            disabled=export_history_df.empty,
+            disabled=history_df.empty,
         )
     with action_col2:
         if st.button("Delete History", disabled=history_df.empty):
@@ -360,10 +433,10 @@ def render_prediction_page(model, scaler, expected_columns):
             st.success("Prediction history deleted.")
             st.rerun()
 
-    if history_df.empty:
+    if table_history_df.empty:
         st.info("No predictions saved yet.")
     else:
-        st.dataframe(history_df, use_container_width=True)
+        st.dataframe(table_history_df, use_container_width=True)
 
 
 def main():
