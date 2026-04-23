@@ -1,4 +1,5 @@
 import hashlib
+import os
 import secrets
 import sqlite3
 from datetime import datetime
@@ -6,11 +7,14 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
+import psycopg2
 import streamlit as st
+from psycopg2.extras import RealDictCursor
 
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "users.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @st.cache_resource
@@ -21,12 +25,36 @@ def load_artifacts():
     return model, scaler, expected_columns
 
 
+def get_connection():
+    if DATABASE_URL:
+        # PostgreSQL (Render)
+        return psycopg2.connect(DATABASE_URL)
+    else:
+        # SQLite (Local)
+        return sqlite3.connect(DB_PATH)
+
+
+def get_placeholder():
+    return "%s" if DATABASE_URL else "?"
+
+
+def get_id_type():
+    return "SERIAL PRIMARY KEY" if DATABASE_URL else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+
+def get_integrity_error():
+    return psycopg2.IntegrityError if DATABASE_URL else sqlite3.IntegrityError
+
+
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """
+    conn = get_connection()
+    cur = conn.cursor()
+    id_type = get_id_type()
+    
+    cur.execute(
+        f"""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {id_type},
             full_name TEXT NOT NULL,
             username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
@@ -34,10 +62,10 @@ def init_db():
         )
         """
     )
-    conn.execute(
-        """
+    cur.execute(
+        f"""
         CREATE TABLE IF NOT EXISTS prediction_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {id_type},
             user_id INTEGER NOT NULL,
             age INTEGER NOT NULL,
             resting_bp INTEGER NOT NULL,
@@ -76,12 +104,16 @@ def verify_password(password, stored_value):
 
 
 def create_user(full_name, username, password):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
+    cur = conn.cursor()
+    placeholder = get_placeholder()
+    IntegrityError = get_integrity_error()
+    
     try:
-        conn.execute(
-            """
+        cur.execute(
+            f"""
             INSERT INTO users (full_name, username, password_hash, created_at)
-            VALUES (?, ?, ?, ?)
+            VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder})
             """,
             (
                 full_name.strip(),
@@ -92,22 +124,26 @@ def create_user(full_name, username, password):
         )
         conn.commit()
         return True, "Account created successfully. Please log in."
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return False, "That username already exists."
     finally:
         conn.close()
 
 
 def authenticate_user(username, password):
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute(
-        """
+    conn = get_connection()
+    cur = conn.cursor()
+    placeholder = get_placeholder()
+    
+    cur.execute(
+        f"""
         SELECT id, full_name, username, password_hash
         FROM users
-        WHERE username = ?
+        WHERE username = {placeholder}
         """,
         (username.strip().lower(),),
-    ).fetchone()
+    )
+    row = cur.fetchone()
     conn.close()
 
     if not row:
@@ -124,13 +160,16 @@ def authenticate_user(username, password):
 
 
 def save_prediction(user_id, age, resting_bp, cholesterol, max_hr, prediction_result):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """
+    conn = get_connection()
+    cur = conn.cursor()
+    placeholder = get_placeholder()
+    
+    cur.execute(
+        f"""
         INSERT INTO prediction_history (
             user_id, age, resting_bp, cholesterol, max_hr, prediction_result, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
         """,
         (
             user_id,
@@ -147,18 +186,23 @@ def save_prediction(user_id, age, resting_bp, cholesterol, max_hr, prediction_re
 
 
 def get_user_prediction_history(user_id, limit=None):
-    conn = sqlite3.connect(DB_PATH)
-    query = """
+    conn = get_connection()
+    cur = conn.cursor()
+    placeholder = get_placeholder()
+    
+    query = f"""
         SELECT age, resting_bp, cholesterol, max_hr, prediction_result, created_at
         FROM prediction_history
-        WHERE user_id = ?
+        WHERE user_id = {placeholder}
         ORDER BY created_at DESC
     """
     params = [user_id]
     if limit is not None:
-        query += " LIMIT ?"
+        query += f" LIMIT {placeholder}"
         params.append(limit)
-    rows = conn.execute(query, tuple(params)).fetchall()
+    
+    cur.execute(query, tuple(params))
+    rows = cur.fetchall()
     conn.close()
 
     return pd.DataFrame(
@@ -175,9 +219,12 @@ def get_user_prediction_history(user_id, limit=None):
 
 
 def delete_user_prediction_history(user_id):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "DELETE FROM prediction_history WHERE user_id = ?",
+    conn = get_connection()
+    cur = conn.cursor()
+    placeholder = get_placeholder()
+    
+    cur.execute(
+        f"DELETE FROM prediction_history WHERE user_id = {placeholder}",
         (user_id,),
     )
     conn.commit()
