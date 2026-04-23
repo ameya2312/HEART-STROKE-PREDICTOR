@@ -271,99 +271,164 @@ def render_visualizations(history_df):
     # Metrics selection for comparison
     metrics = ["Resting BP", "Cholesterol", "Max HR"]
     
+    # Using a modern color palette
+    color_map = {
+        "Resting BP": "#4F46E5",  # Indigo
+        "Cholesterol": "#10B981", # Teal
+        "Max HR": "#F59E0B"        # Amber
+    }
+    
     fig = px.line(
         viz_df, 
         x="Saved At", 
         y=metrics, 
         title="Vital Metrics Comparison Over Time",
         labels={"value": "Metric Value", "variable": "Health Metric"},
-        markers=True
+        markers=True,
+        color_discrete_map=color_map
     )
     
-    fig.update_layout(hovermode="x unified")
+    fig.update_layout(
+        hovermode="x unified",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color="#1E293B"),  # Explicitly set font for all elements
+        title_font=dict(size=20, color="#1E293B"),
+        legend=dict(font=dict(color="#1E293B")),
+        xaxis=dict(
+            title_font=dict(color="#1E293B"),
+            tickfont=dict(color="#1E293B"),
+            gridcolor="#E2E8F0"
+        ),
+        yaxis=dict(
+            title_font=dict(color="#1E293B"),
+            tickfont=dict(color="#1E293B"),
+            gridcolor="#E2E8F0"
+        ),
+        legend_title_text=''
+    )
     st.plotly_chart(fig, use_container_width=True)
 
     # Risk progression
-    st.write("**Risk History Visualization**")
+    st.markdown("**Risk History Visualization**")
     fig_risk = px.scatter(
         viz_df,
         x="Saved At",
         y="Result",
         color="Result",
-        color_discrete_map={"High Risk of Heart Disease": "red", "Low Risk of Heart Disease": "green"},
+        color_discrete_map={
+            "High Risk of Heart Disease": "#EF4444",  # Rose/Red
+            "Low Risk of Heart Disease": "#10B981"    # Teal/Green
+        },
         title="Prediction Risk Progression"
+    )
+    fig_risk.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color="#1E293B"),
+        title_font=dict(color="#1E293B"),
+        xaxis=dict(
+            title_font=dict(color="#1E293B"),
+            tickfont=dict(color="#1E293B"),
+            gridcolor="#E2E8F0"
+        ),
+        yaxis=dict(
+            title_font=dict(color="#1E293B"),
+            tickfont=dict(color="#1E293B"),
+            gridcolor="#E2E8F0"
+        )
     )
     st.plotly_chart(fig_risk, use_container_width=True)
 
 
 def render_auth_page():
-    st.title("Heart Disease Prediction Login")
-    st.write("Create an account or log in to access the prediction tool.")
+    # Center the login form
+    _, col, _ = st.columns([1, 2, 1])
+    
+    with col:
+        st.title("🔐 Heart Risk Pro")
+        st.markdown("### Welcome Back")
+        st.write("Please log in or create an account to continue.")
 
-    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
+        login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
 
-    with login_tab:
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Login")
+        with login_tab:
+            with st.form("login_form"):
+                username = st.text_input("Username")
+                password = st.text_input("Password", type="password")
+                submitted = st.form_submit_button("Log In")
 
-        if submitted:
-            user = authenticate_user(username, password)
-            if user:
-                st.session_state.user = user
-                st.success("Login successful.")
-                st.rerun()
-            else:
-                st.error("Invalid username or password.")
-
-    with signup_tab:
-        with st.form("signup_form"):
-            full_name = st.text_input("Full Name")
-            username = st.text_input("Choose a Username")
-            password = st.text_input("Choose a Password", type="password")
-            confirm_password = st.text_input("Confirm Password", type="password")
-            submitted = st.form_submit_button("Create Account")
-
-        if submitted:
-            if not full_name or not username or not password:
-                st.error("Please fill in all fields.")
-            elif len(password) < 6:
-                st.error("Password must be at least 6 characters long.")
-            elif password != confirm_password:
-                st.error("Passwords do not match.")
-            else:
-                created, message = create_user(full_name, username, password)
-                if created:
-                    st.success(message)
+            if submitted:
+                user = authenticate_user(username, password)
+                if user:
+                    st.session_state.user = user
+                    st.success("Login successful.")
+                    st.rerun()
                 else:
-                    st.error(message)
+                    st.error("Invalid username or password.")
+
+        with signup_tab:
+            with st.form("signup_form"):
+                full_name = st.text_input("Full Name")
+                username = st.text_input("Choose a Username")
+                password = st.text_input("Choose a Password", type="password")
+                confirm_password = st.text_input("Confirm Password", type="password")
+                submitted = st.form_submit_button("Create Account")
+
+            if submitted:
+                if not full_name or not username or not password:
+                    st.error("Please fill in all fields.")
+                elif len(password) < 6:
+                    st.error("Password must be at least 6 characters long.")
+                elif password != confirm_password:
+                    st.error("Passwords do not match.")
+                else:
+                    created, message = create_user(full_name, username, password)
+                    if created:
+                        st.success(message)
+                    else:
+                        st.error(message)
 
 
 def render_prediction_page(model, scaler, expected_columns):
-    st.title("Heart Disease Prediction")
-    st.write(f"Signed in as **{st.session_state.user['full_name']}**")
-    st.write("Enter patient details below:")
+    # Sidebar Profile Section
+    with st.sidebar:
+        st.markdown(f"### 👤 {st.session_state.user['full_name']}")
+        st.write(f"@{st.session_state.user['username']}")
+        if st.button("Logout", use_container_width=True):
+            st.session_state.pop("user", None)
+            st.rerun()
+        st.divider()
 
-    if st.sidebar.button("Logout"):
-        st.session_state.pop("user", None)
-        st.rerun()
+    st.title("💓 Heart Risk Pro")
+    st.write("Enter patient details below to analyze heart disease risk.")
 
     with st.form("prediction_form"):
-        age = st.number_input("Age", 1, 120, 30)
-        resting_bp = st.number_input("Resting Blood Pressure", 50, 250, 120)
-        cholesterol = st.number_input("Cholesterol", 0, 600, 200)
-        fasting_bs = st.selectbox("Fasting Blood Sugar > 120 mg/dl?", ["No", "Yes"])
-        max_hr = st.number_input("Max Heart Rate", 60, 250, 150)
-        oldpeak = st.number_input("Oldpeak (ST depression)", 0.0, 10.0, 1.0)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📊 Basic Information")
+            age = st.number_input("Age", 1, 120, 30)
+            sex = st.selectbox("Sex", ["Male", "Female"])
+            resting_bp = st.number_input("Resting Blood Pressure", 50, 250, 120)
+            cholesterol = st.number_input("Cholesterol", 0, 600, 200)
 
-        sex = st.selectbox("Sex", ["Male", "Female"])
-        chest_pain = st.selectbox("Chest Pain Type", ["ATA", "NAP", "TA", "ASY"])
-        resting_ecg = st.selectbox("Resting ECG", ["Normal", "ST", "LVH"])
-        exercise_angina = st.selectbox("Exercise Induced Angina?", ["No", "Yes"])
-        st_slope = st.selectbox("ST Slope", ["Flat", "Up", "Down"])
+        with col2:
+            st.markdown("### 🏥 Clinical Tests")
+            fasting_bs = st.selectbox("Fasting Blood Sugar > 120 mg/dl?", ["No", "Yes"])
+            max_hr = st.number_input("Max Heart Rate", 60, 250, 150)
+            oldpeak = st.number_input("Oldpeak (ST depression)", 0.0, 10.0, 1.0)
+            chest_pain = st.selectbox("Chest Pain Type", ["ATA", "NAP", "TA", "ASY"])
+            resting_ecg = st.selectbox("Resting ECG", ["Normal", "ST", "LVH"])
 
-        submitted = st.form_submit_button("Predict")
+        st.markdown("### 🏃 Activity")
+        exercise_col, slope_col = st.columns(2)
+        with exercise_col:
+            exercise_angina = st.selectbox("Exercise Induced Angina?", ["No", "Yes"])
+        with slope_col:
+            st_slope = st.selectbox("ST Slope", ["Flat", "Up", "Down"])
+
+        submitted = st.form_submit_button("Predict Risk Level")
 
     if submitted:
         input_data = {
@@ -440,6 +505,141 @@ def render_prediction_page(model, scaler, expected_columns):
 
 
 def main():
+    st.set_page_config(
+        page_title="Heart Risk Pro",
+        page_icon="💓",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    # Custom CSS for a more attractive UI
+    st.markdown("""
+        <style>
+        /* Global body override */
+        html, body, [data-testid="stAppViewContainer"] {
+            background-color: #F1F5F9 !important;
+        }
+        
+        /* Main container padding and background */
+        .block-container {
+            background-color: #F1F5F9 !important;
+            padding-top: 2rem !important;
+            padding-bottom: 2rem !important;
+        }
+        
+        /* Target EVERYTHING for background color */
+        .stApp, .main, .stSidebar, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"] {
+            background-color: #F1F5F9 !important;
+        }
+
+        /* Force light theme for ALL buttons including download buttons */
+        .stButton>button, .stDownloadButton>button, [data-testid="stFormSubmitButton"]>button {
+            background-color: #4F46E5 !important;
+            color: white !important;
+            border-radius: 10px !important;
+            border: none !important;
+            padding: 0.6rem 2.5rem !important;
+            font-weight: 600 !important;
+        }
+
+        /* Specifically target the download button which often stays dark */
+        .stDownloadButton > button {
+            background-color: #4F46E5 !important;
+            color: #FFFFFF !important;
+        }
+        
+        /* Force light theme for dataframes and tables specifically */
+        [data-testid="stTable"], [data-testid="stDataFrame"], .stTable, .stDataFrame, div[role="grid"], .glideDataEditor {
+            background-color: #FFFFFF !important;
+            color: #1E293B !important;
+        }
+        
+        /* Force light theme for table cells and headers */
+        [data-testid="stTable"] td, [data-testid="stTable"] th, [role="gridcell"], [role="columnheader"] {
+            background-color: #FFFFFF !important;
+            color: #1E293B !important;
+        }
+
+        /* Target specific Streamlit elements that might stay dark */
+        div[data-testid="stVerticalBlock"] > div {
+            background-color: transparent !important;
+        }
+        
+        /* Headers and titles */
+        h1, h2, h3, h4, h5, h6, p, span, label {
+            color: #1E293B !important;
+            font-family: 'Inter', 'Segoe UI', sans-serif !important;
+        }
+        
+        /* Sidebar specific override */
+        [data-testid="stSidebar"], [data-testid="stSidebarNav"] {
+            background-color: #FFFFFF !important;
+            border-right: 1px solid #E2E8F0 !important;
+        }
+
+        /* Form containers */
+        [data-testid="stForm"] {
+            background-color: #FFFFFF !important;
+            padding: 2.5rem !important;
+            border-radius: 20px !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important;
+            border: 1px solid #E2E8F0 !important;
+        }
+
+        /* Target ALL input fields specifically */
+        input, select, textarea, [data-baseweb="input"] {
+            background-color: #FFFFFF !important;
+            color: #1E293B !important;
+            border-color: #E2E8F0 !important;
+        }
+        
+        /* BaseWeb specific overrides (Streamlit uses BaseWeb) */
+        [data-baseweb="input"] > div {
+            background-color: #FFFFFF !important;
+            color: #1E293B !important;
+        }
+
+        [data-baseweb="select"] > div {
+            background-color: #FFFFFF !important;
+            color: #1E293B !important;
+        }
+
+        /* Buttons */
+        .stButton>button, [data-testid="stFormSubmitButton"]>button {
+            background-color: #4F46E5 !important;
+            color: white !important;
+            border-radius: 10px !important;
+            border: none !important;
+            padding: 0.6rem 2.5rem !important;
+            font-weight: 600 !important;
+            width: 100% !important; /* Make button full width in login */
+        }
+        
+        .stButton>button:hover {
+            background-color: #4338CA;
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4);
+        }
+        
+        /* Dataframes */
+        .stDataFrame {
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #E2E8F0;
+        }
+
+        /* Recommendations card */
+        .recommendation-card {
+            background-color: #FFFFFF;
+            padding: 1.5rem;
+            border-left: 6px solid #4F46E5;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     init_db()
     model, scaler, expected_columns = load_artifacts()
 
